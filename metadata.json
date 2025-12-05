@@ -1,5 +1,5 @@
 {
-  "name": "SocialMigrate AI",
+  "name": "Copy of SocialMigrate AI",
   "description": "An AI-powered tool to filter and migrate posts between social media accounts based on specific topics.",
   "requestFramePermissions": [
     "microphone"
