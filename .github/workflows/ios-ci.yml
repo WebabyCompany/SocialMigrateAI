@@ -1,0 +1,41 @@
+name: iOS CI/CD Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_test:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Konfiguracja Xcode: 
+      - name: Use Default Latest Xcode
+        run: echo "Używamy domyślnej, najnowszej wersji Xcode na runnerze macos-latest."
+        
+      # 2. Instalacja zależności
+      - name: Install Dependencies (CocoaPods)
+        run: pod install
+        working-directory: ./SocialMigrateAI
+
+      # 3. Budowanie Projektu (Uzupełniona nazwa Schematu)
+      - name: Build iOS App
+        run: |
+          xcodebuild clean build \
+          -project "socialmigrateai.xcodeproj" \
+          -scheme "SocialMigrateAI" \
+          -destination 'platform=iOS Simulator,name=iPhone 15' 
+        working-directory: ./SocialMigrateAI
+
+      # 4. Testy (Uzupełniona nazwa Schematu)
+      - name: Run Tests
+        run: |
+          xcodebuild test \
+          -project "socialmigrateai.xcodeproj" \
+          -scheme "SocialMigrateAI" \
+          -destination 'platform=iOS Simulator,name=iPhone 15'  
+        working-directory: ./SocialMigrateAI
