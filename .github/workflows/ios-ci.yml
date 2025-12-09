@@ -2,7 +2,7 @@ name: Build and Deploy React to Apache (socialmigrateai)
 
 on:
   push:
-    branches: [ "main" ]   # gałąź do deployu
+    branches: [ "main" ]
 
 jobs:
   build:
@@ -16,8 +16,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          # UWAGA:
-          # Odkomentuj cache: 'npm' dopiero jak dodasz package-lock.json
+          # Jak tylko dodasz package-lock.json do repo, możesz włączyć cache:
           # cache: "npm"
 
       - name: Install dependencies
@@ -31,13 +30,12 @@ jobs:
           fi
 
       - name: Build
-        run: npm run build
+        run: npm run build   # Vite -> dist/
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: react-build
-          # Vite buduje do katalogu dist
           path: dist
           if-no-files-found: error
 
@@ -51,6 +49,11 @@ jobs:
         with:
           name: react-build
           path: ./build_artifact
+
+      - name: Show downloaded files (debug)
+        run: |
+          echo "Zawartość ./build_artifact:"
+          ls -R ./build_artifact
 
       - name: Install rsync and ssh client
         run: |
@@ -71,16 +74,17 @@ jobs:
         env:
           SSH_TARGET_DIR: ${{ secrets.SSH_TARGET_DIR }}
         run: |
-          # Dla Vite powinna istnieć tylko dist/, ale zostawiłem build/ na wszelki wypadek
-          if [ -d "./build_artifact/build" ]; then
-            SRC_DIR="./build_artifact/build/"
-          elif [ -d "./build_artifact/dist" ]; then
-            SRC_DIR="./build_artifact/dist/"
+          # UWAGA: download-artifact dodaje podkatalog z nazwą artefaktu: react-build
+          if [ -d "./build_artifact/react-build/dist" ]; then
+            SRC_DIR="./build_artifact/react-build/dist/"
+          elif [ -d "./build_artifact/react-build/build" ]; then
+            # Zostawione na wszelki wypadek, gdybyś kiedyś użył CRA
+            SRC_DIR="./build_artifact/react-build/build/"
           else
-            echo "Brak katalogu build ani dist w artefakcie" && exit 1
+            echo "Brak katalogu build ani dist w pobranym artefakcie" && exit 1
           fi
 
-          # Wrzucenie plików do katalogu docelowego na serwerze
+          echo "Kopiuję z: $SRC_DIR do: $SSH_TARGET_DIR"
           rsync -avz --delete "$SRC_DIR" target:"$SSH_TARGET_DIR"
 
       - name: (Optional) Reload Apache
