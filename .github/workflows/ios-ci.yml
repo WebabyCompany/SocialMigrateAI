@@ -1,36 +1,38 @@
-name: Build and Deploy React to Apache (socialmigrateai)
+name: Build and Deploy SocialMigrateAI
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
   build:
+    name: Build React App
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Use Node.js 20
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          # Jak tylko dodasz package-lock.json do repo, możesz włączyć cache:
-          # cache: "npm"
+          node-version: 20
+          # Odkomentuj po dodaniu package-lock.json:
+          # cache: npm
 
       - name: Install dependencies
         run: |
           if [ -f package-lock.json ]; then
-            echo "Found package-lock.json -> npm ci"
+            echo "Found package-lock.json -> using npm ci"
             npm ci
           else
-            echo "No package-lock.json -> npm install"
+            echo "No lockfile -> using npm install"
             npm install
           fi
 
-      - name: Build
-        run: npm run build   # Vite -> dist/
+      - name: Build app
+        run: npm run build
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -40,8 +42,10 @@ jobs:
           if-no-files-found: error
 
   deploy:
+    name: Deploy to Server
     needs: build
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Download build artifact
@@ -55,38 +59,31 @@ jobs:
           echo "Zawartość ./build_artifact:"
           ls -R ./build_artifact
 
-      - name: Install rsync and ssh client
+      - name: Install rsync and SSH client
         run: |
           sudo apt-get update
           sudo apt-get install -y rsync openssh-client
 
-      - name: Prepare SSH key
+      - name: Configure SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
 
-          # Konfiguracja hosta "target" używanego w rsync/ssh
           printf "Host target\n  HostName %s\n  User %s\n  Port %s\n  IdentityFile ~/.ssh/id_deploy\n  StrictHostKeyChecking no\n" \
             "${{ secrets.SSH_HOST }}" "${{ secrets.SSH_USER }}" "${{ secrets.SSH_PORT }}" > ~/.ssh/config
 
-      - name: Deploy build to server via rsync
+      - name: Deploy files via rsync
         env:
           SSH_TARGET_DIR: ${{ secrets.SSH_TARGET_DIR }}
         run: |
-          # UWAGA: download-artifact dodaje podkatalog z nazwą artefaktu: react-build
-          if [ -d "./build_artifact/react-build/dist" ]; then
-            SRC_DIR="./build_artifact/react-build/dist/"
-          elif [ -d "./build_artifact/react-build/build" ]; then
-            # Zostawione na wszelki wypadek, gdybyś kiedyś użył CRA
-            SRC_DIR="./build_artifact/react-build/build/"
-          else
-            echo "Brak katalogu build ani dist w pobranym artefakcie" && exit 1
-          fi
+          echo "Zawartość ./build_artifact (debug):"
+          ls -R ./build_artifact || true
 
+          SRC_DIR="./build_artifact"
           echo "Kopiuję z: $SRC_DIR do: $SSH_TARGET_DIR"
-          rsync -avz --delete "$SRC_DIR" target:"$SSH_TARGET_DIR"
+          rsync -avz --delete "$SRC_DIR"/ target:"$SSH_TARGET_DIR"
 
-      - name: (Optional) Reload Apache
+      - name: Reload Apache
         run: |
           ssh target "sudo systemctl reload apache2 || sudo systemctl restart apache2"
