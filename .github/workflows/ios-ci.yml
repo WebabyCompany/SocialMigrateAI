@@ -2,7 +2,7 @@ name: Build and Deploy React to Apache (socialmigrateai)
 
 on:
   push:
-    branches: [ "main" ]   # albo inna gałąź, z której chcesz deployować
+    branches: [ "main" ]   # gałąź do deployu
 
 jobs:
   build:
@@ -16,10 +16,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
+          # UWAGA:
+          # Odkomentuj cache: 'npm' dopiero jak dodasz package-lock.json
+          # cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "Found package-lock.json -> npm ci"
+            npm ci
+          else
+            echo "No package-lock.json -> npm install"
+            npm install
+          fi
 
       - name: Build
         run: npm run build
@@ -28,10 +37,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: react-build
-          path: |
-            build
-            dist
-          if-no-files-found: ignore
+          # Vite buduje do katalogu dist
+          path: dist
+          if-no-files-found: error
 
   deploy:
     needs: build
@@ -54,6 +62,8 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
+
+          # Konfiguracja hosta "target" używanego w rsync/ssh
           printf "Host target\n  HostName %s\n  User %s\n  Port %s\n  IdentityFile ~/.ssh/id_deploy\n  StrictHostKeyChecking no\n" \
             "${{ secrets.SSH_HOST }}" "${{ secrets.SSH_USER }}" "${{ secrets.SSH_PORT }}" > ~/.ssh/config
 
@@ -61,7 +71,7 @@ jobs:
         env:
           SSH_TARGET_DIR: ${{ secrets.SSH_TARGET_DIR }}
         run: |
-          # Wybierz build/ (CRA) albo dist/ (Vite)
+          # Dla Vite powinna istnieć tylko dist/, ale zostawiłem build/ na wszelki wypadek
           if [ -d "./build_artifact/build" ]; then
             SRC_DIR="./build_artifact/build/"
           elif [ -d "./build_artifact/dist" ]; then
