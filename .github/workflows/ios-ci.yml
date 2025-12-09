@@ -14,12 +14,13 @@ jobs:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      # Krok 2: Konfiguracja Node.js
+      # Krok 2: Konfiguracja Node.js - POPRAWKA: Dodanie ścieżki do pliku lock
       - name: 2. Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+          # Wskazujemy na plik w podkatalogu:
           cache-dependency-path: SocialMigrateAI/package-lock.json
 
       # Krok 3: Instalacja zależności
