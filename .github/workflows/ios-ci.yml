@@ -1,63 +1,78 @@
-name: React Web App CI/CD Deploy
+name: Build and Deploy React to Apache (socialmigrateai)
 
 on:
   push:
-    branches:
-      - main # Uruchamiany przy każdym pushu do gałęzi main
+    branches: [ "main" ]   # albo inna gałąź, z której chcesz deployować
 
 jobs:
-  build_and_deploy:
-    # Używamy maszyny Linux (Ubuntu) do budowania aplikacji webowej
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Krok 2: Konfiguracja Node.js - POPRAWKA: Dodanie ścieżki do pliku lock
-      - name: 2. Setup Node.js
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          # Wskazujemy na plik w podkatalogu:
-          cache-dependency-path: SocialMigrateAI/package-lock.json
+          node-version: "20"
+          cache: "npm"
 
-      # Krok 3: Instalacja zależności
-      # Aktywujemy working-directory, aby wejść do katalogu z plikiem package.json
-      - name: 3. Install Dependencies
-        run: npm install
-        working-directory: SocialMigrateAI
+      - name: Install dependencies
+        run: npm ci
 
-      # Krok 4: Budowanie aplikacji React (Tworzenie katalogu 'build')
-      - name: 4. Build React Application
+      - name: Build
         run: npm run build
-        working-directory: SocialMigrateAI
-        
-      # Krok 5: Przesyłanie skompilowanych plików na VPS (Deployment)
-      - name: 5. Deploy 'build' Directory via rsync to OVH VPS
-        uses: easingthemes/ssh-deploy@main
-        with:
-          # Dane logowania pobrane z GitHub Secrets
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.SSH_HOST }}
-          REMOTE_USER: ${{ secrets.SSH_USER }}
-          
-          # SKĄD: Katalog 'build' utworzony w kroku 4. (Ścieżka jest względna do working-directory!)
-          SOURCE: "SocialMigrateAI/build/"
-          # DOKĄD: Katalog docelowy na serwerze (np. /var/www/webaby-page/)
-          TARGET: ${{ secrets.SSH_TARGET_DIR }}
-          
-          ARGS: "--delete" # Usuwa stare, niepotrzebne pliki na serwerze
 
-      # Krok 6: Opcjonalne skrypty po deploymentu (np. restart Node.js/serwera)
-      - name: 6. Run post-deployment scripts (if needed)
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            echo "Deployment statycznej aplikacji React zakończony na ${SSH_TARGET_DIR}."
-            # Jeśli masz serwer Node.js, który musisz restartować, umieść tu komendę, np:
-            # pm2 restart nazwa-twojego-backendu || true
+          name: react-build
+          path: |
+            build
+            dist
+          if-no-files-found: ignore
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: react-build
+          path: ./build_artifact
+
+      - name: Install rsync and ssh client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync openssh-client
+
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf "Host target\n  HostName %s\n  User %s\n  Port %s\n  IdentityFile ~/.ssh/id_deploy\n  StrictHostKeyChecking no\n" \
+            "${{ secrets.SSH_HOST }}" "${{ secrets.SSH_USER }}" "${{ secrets.SSH_PORT }}" > ~/.ssh/config
+
+      - name: Deploy build to server via rsync
+        env:
+          SSH_TARGET_DIR: ${{ secrets.SSH_TARGET_DIR }}
+        run: |
+          # Wybierz build/ (CRA) albo dist/ (Vite)
+          if [ -d "./build_artifact/build" ]; then
+            SRC_DIR="./build_artifact/build/"
+          elif [ -d "./build_artifact/dist" ]; then
+            SRC_DIR="./build_artifact/dist/"
+          else
+            echo "Brak katalogu build ani dist w artefakcie" && exit 1
+          fi
+
+          # Wrzucenie plików do katalogu docelowego na serwerze
+          rsync -avz --delete "$SRC_DIR" target:"$SSH_TARGET_DIR"
+
+      - name: (Optional) Reload Apache
+        run: |
+          ssh target "sudo systemctl reload apache2 || sudo systemctl restart apache2"
