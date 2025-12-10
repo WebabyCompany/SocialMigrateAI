@@ -34,6 +34,12 @@ jobs:
 
       - name: Build app
         run: npm run build
+        env:
+          # Secret z repozytorium: Settings → Secrets and variables → Actions → New repository secret
+          FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+          # Opcjonalnie mapowanie pod bundlery:
+          VITE_FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+          REACT_APP_FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
