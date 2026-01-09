@@ -25,8 +25,20 @@ const App: React.FC = () => {
   const t = getTranslation(lang);
 
   // --- ENVIRONMENT VARIABLES ---
-  const appIdConsumer = process.env.FACEBOOK_APP_ID_CONSUMER || '';
-  const appIdBusiness = process.env.FACEBOOK_APP_ID_BUSINESS || '';
+  // Consumer ID: For reading Personal Profiles (user_posts)
+  const appIdConsumer = 
+    process.env.FACEBOOK_APP_ID_CONSUMER || 
+    process.env.REACT_APP_FACEBOOK_APP_ID_CONSUMER || 
+    ((import.meta as any).env && (import.meta as any).env.VITE_FACEBOOK_APP_ID_CONSUMER) || 
+    '';
+
+  // Business ID: For reading/writing Pages (pages_manage_posts, pages_show_list)
+  const appIdBusiness = 
+    process.env.FACEBOOK_APP_ID_BUSINESS || 
+    process.env.REACT_APP_FACEBOOK_APP_ID_BUSINESS || 
+    ((import.meta as any).env && (import.meta as any).env.VITE_FACEBOOK_APP_ID_BUSINESS) || 
+    '';
+  
   
   const [isSdkLoaded, setIsSdkLoaded] = useState(false);
   const [currentAppId, setCurrentAppId] = useState<string>('');
